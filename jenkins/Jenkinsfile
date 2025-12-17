@@ -6,9 +6,12 @@ pipeline {
         IMAGE_TAG = "v1"
         DOCKERFILE_PATH = "docker/Dockerfile"
         APP_PATH = "app/flask-app"
+        DOCKER_REGISTRY = "awaismalak"  // my dockerhub username
+        K8S_DEPLOYMENT_FILE = "kubernetes/flask-app-deployment.yaml"
     }
 
     stages {
+
         stage('Checkout') {
             steps {
                 git branch: 'main', url: 'https://github.com/Malikawais108/aws-devops-cicd-project.git'
@@ -23,17 +26,46 @@ pipeline {
             }
         }
 
-        stage('Run Container (Test)') {
+        stage('Test Container') {
             steps {
                 script {
-                    sh "docker run -d --name test-${IMAGE_NAME} -p 5000:5000 ${IMAGE_NAME}:${IMAGE_TAG}"
+                    sh "docker run -d --name test-${IMAGE_NAME} -p 5001:5000 ${IMAGE_NAME}:${IMAGE_TAG}"
                     sh "sleep 10" // wait for container to start
-                    sh "docker ps | grep ${IMAGE_NAME}"
+                    sh "curl -f http://localhost:5001 || exit 1"  // simple health check
                     sh "docker stop test-${IMAGE_NAME}"
                     sh "docker rm test-${IMAGE_NAME}"
                 }
             }
         }
+
+        stage('Docker Login') {
+            steps {
+                script {
+                    // login to Docker Hub using Jenkins credentials
+                    withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
+                        sh "echo $PASS | docker login -u $USER --password-stdin"
+                    }
+                }
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                script {
+                    sh "docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+                    sh "docker push ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+                }
+            }
+        }
+
+        stage('Deploy to Kubernetes (Optional)') {
+            steps {
+                script {
+                    sh "kubectl apply -f ${K8S_DEPLOYMENT_FILE}"
+                }
+            }
+        }
+
     }
 
     post {
@@ -41,9 +73,10 @@ pipeline {
             echo "Pipeline completed successfully!"
         }
         failure {
-            echo "Pipeline failed. Check logs!"
+            echo "Pipeline failed! Check logs."
         }
     }
 }
+
 
 
