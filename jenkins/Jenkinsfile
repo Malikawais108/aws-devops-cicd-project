@@ -4,7 +4,6 @@ pipeline {
     environment {
         IMAGE_NAME = "flask-devops-app"
         IMAGE_TAG = "v1"
-        TEST_CONTAINER_NAME = "test-flask-devops-app"
     }
 
     stages {
@@ -18,7 +17,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} -f docker/Dockerfile ."
+                    sh "sudo docker build -t ${IMAGE_NAME}:${IMAGE_TAG} -f docker/Dockerfile ."
                 }
             }
         }
@@ -26,15 +25,16 @@ pipeline {
         stage('Test Container') {
             steps {
                 script {
-                    // Generate a random port to avoid conflicts
+                    // Generate random container name and port
+                    env.TEST_CONTAINER = "test-${IMAGE_NAME}-${env.BUILD_NUMBER}"
                     env.TEST_PORT = sh(script: "shuf -i 5001-5999 -n 1", returnStdout: true).trim()
-                    echo "Running test container on port ${env.TEST_PORT}"
+                    echo "Running test container ${env.TEST_CONTAINER} on port ${env.TEST_PORT}"
 
-                    // Remove container if exists
-                    sh "docker rm -f ${TEST_CONTAINER_NAME} || true"
+                    // Remove old container if exists (ignore errors)
+                    sh "sudo docker rm -f ${env.TEST_CONTAINER} || true"
 
                     // Run container
-                    sh "docker run -d --name ${TEST_CONTAINER_NAME} -p ${env.TEST_PORT}:5000 ${IMAGE_NAME}:${IMAGE_TAG}"
+                    sh "sudo docker run -d --name ${env.TEST_CONTAINER} -p ${env.TEST_PORT}:5000 ${IMAGE_NAME}:${IMAGE_TAG}"
                 }
             }
         }
@@ -44,9 +44,9 @@ pipeline {
                 script {
                     withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                         sh """
-                            echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                            docker tag ${IMAGE_NAME}:${IMAGE_TAG} $DOCKER_USER/${IMAGE_NAME}:${IMAGE_TAG}
-                            docker push $DOCKER_USER/${IMAGE_NAME}:${IMAGE_TAG}
+                            echo "$DOCKER_PASS" | sudo docker login -u "$DOCKER_USER" --password-stdin
+                            sudo docker tag ${IMAGE_NAME}:${IMAGE_TAG} $DOCKER_USER/${IMAGE_NAME}:${IMAGE_TAG}
+                            sudo docker push $DOCKER_USER/${IMAGE_NAME}:${IMAGE_TAG}
                         """
                     }
                 }
@@ -55,7 +55,7 @@ pipeline {
 
         stage('Deploy to Kubernetes (Optional)') {
             steps {
-                echo "Deployment to Kubernetes can be added here if required."
+                echo "Deploy to Kubernetes can be added here if required."
             }
         }
     }
@@ -63,7 +63,7 @@ pipeline {
     post {
         always {
             echo "Cleaning up test container..."
-            sh "docker rm -f ${TEST_CONTAINER_NAME} || true"
+            sh "sudo docker rm -f ${env.TEST_CONTAINER} || true"
         }
 
         success {
