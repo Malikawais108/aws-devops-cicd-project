@@ -3,9 +3,8 @@ pipeline {
 
     environment {
         DOCKER_IMAGE = "flask-devops-app:v1"
-        TEST_CONTAINER = "test-flask-devops-app-${env.BUILD_NUMBER}"  // Unique name per build
-        DOCKER_REGISTRY = "<YOUR_DOCKER_REGISTRY>"                  // Replace if pushing to Docker Hub
-        DOCKER_CREDENTIALS = "docker-hub-credentials"              // Jenkins credential ID
+        DOCKER_REGISTRY = ""   // Set your registry if pushing
+        DOCKER_CREDENTIALS = "docker-hub-credentials"
     }
 
     stages {
@@ -18,9 +17,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    sh """
-                        docker build -t ${DOCKER_IMAGE} -f docker/Dockerfile .
-                    """
+                    sh "docker build -t ${DOCKER_IMAGE} -f docker/Dockerfile ."
                 }
             }
         }
@@ -28,11 +25,17 @@ pipeline {
         stage('Test Container') {
             steps {
                 script {
-                    // Remove container if exists (safe)
-                    sh "docker rm -f ${TEST_CONTAINER} || true"
+                    // Generate a random free port between 5000-5999
+                    def randomPort = 5000 + new Random().nextInt(1000)
+                    env.TEST_PORT = "${randomPort}"
+                    env.TEST_CONTAINER = "test-flask-devops-app-${env.BUILD_NUMBER}"
 
-                    // Run container
-                    sh "docker run -d --name ${TEST_CONTAINER} -p 5001:5000 ${DOCKER_IMAGE}"
+                    // Remove container if exists
+                    sh "docker rm -f ${env.TEST_CONTAINER} || true"
+
+                    // Run container with dynamic port
+                    sh "docker run -d --name ${env.TEST_CONTAINER} -p ${env.TEST_PORT}:5000 ${DOCKER_IMAGE}"
+                    echo "Test container running on port ${env.TEST_PORT}"
                 }
             }
         }
@@ -53,12 +56,8 @@ pipeline {
         }
 
         stage('Deploy to Kubernetes (Optional)') {
-            when {
-                expression { return true }  // Change condition if needed
-            }
             steps {
                 script {
-                    // Replace with your deployment YAML or kubectl commands
                     sh "kubectl apply -f k8s/deployment.yaml"
                 }
             }
@@ -67,8 +66,8 @@ pipeline {
 
     post {
         always {
-            echo 'Cleaning up test container...'
-            sh "docker rm -f ${TEST_CONTAINER} || true"
+            echo "Cleaning up test container..."
+            sh "docker rm -f ${env.TEST_CONTAINER} || true"
         }
 
         success {
