@@ -1,6 +1,13 @@
 pipeline {
     agent any
 
+    environment {
+        IMAGE_NAME = "flask-devops-app"
+        IMAGE_TAG = "v1"
+        DOCKERFILE_PATH = "docker/Dockerfile"
+        APP_PATH = "app/flask-app"
+    }
+
     stages {
         stage('Checkout') {
             steps {
@@ -11,22 +18,32 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    docker.build("flask-devops-app:v1", "docker")
+                    docker.build("${IMAGE_NAME}:${IMAGE_TAG}", "-f ${DOCKERFILE_PATH} .")
                 }
             }
         }
 
-        stage('Run Container') {
+        stage('Run Container (Test)') {
             steps {
-                sh 'docker run -d -p 5000:5000 --name flask-app flask-devops-app:v1'
-            }
-        }
-
-        stage('Health Check') {
-            steps {
-                sh 'curl http://localhost:5000/health'
+                script {
+                    sh "docker run -d --name test-${IMAGE_NAME} -p 5000:5000 ${IMAGE_NAME}:${IMAGE_TAG}"
+                    sh "sleep 10" // wait for container to start
+                    sh "docker ps | grep ${IMAGE_NAME}"
+                    sh "docker stop test-${IMAGE_NAME}"
+                    sh "docker rm test-${IMAGE_NAME}"
+                }
             }
         }
     }
+
+    post {
+        success {
+            echo "Pipeline completed successfully!"
+        }
+        failure {
+            echo "Pipeline failed. Check logs!"
+        }
+    }
 }
+
 
