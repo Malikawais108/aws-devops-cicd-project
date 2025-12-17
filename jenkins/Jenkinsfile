@@ -2,64 +2,62 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "flask-devops-app"
-        IMAGE_TAG = "v1"
-        DOCKER_CREDENTIALS = "docker-hub-credentials"
+        DOCKER_IMAGE = "flask-devops-app:v1"
+        DOCKER_CREDENTIALS_ID = "docker-hub-credentials"
     }
 
     stages {
+
         stage('Checkout SCM') {
             steps {
+                echo "Checking out code from Git..."
                 checkout scm
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                script {
-                    echo "Building Docker image ${IMAGE_NAME}:${IMAGE_TAG}"
-                    sh "sudo docker build -t ${IMAGE_NAME}:${IMAGE_TAG} -f docker/Dockerfile ."
-                }
+                echo "Building Docker image ${DOCKER_IMAGE}..."
+                sh "sudo docker build -t ${DOCKER_IMAGE} -f docker/Dockerfile ."
             }
         }
 
         stage('Test Container') {
             steps {
                 script {
-                    // Use 'def' for local variable
+                    // Generate a random test port between 5001-5999
                     def TEST_PORT = sh(script: "shuf -i 5001-5999 -n 1", returnStdout: true).trim()
+                    env.TEST_PORT = TEST_PORT
                     echo "Running test container on port ${TEST_PORT}"
 
-                    // Remove old test container (ignore errors)
+                    // Remove old test container if exists
                     sh "sudo docker rm -f test-flask-devops-app || true"
 
-                    // Run new test container
-                    sh "sudo docker run -d --name test-flask-devops-app -p ${TEST_PORT}:5000 ${IMAGE_NAME}:${IMAGE_TAG}"
+                    // Run the new test container
+                    sh "sudo docker run -d --name test-flask-devops-app -p ${TEST_PORT}:5000 ${DOCKER_IMAGE}"
                 }
             }
         }
 
         stage('Docker Login & Push') {
             steps {
-                script {
-                    withCredentials([usernamePassword(credentialsId: "${DOCKER_CREDENTIALS}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                        echo "Logging in to Docker Hub..."
-                        sh "echo $DOCKER_PASS | sudo docker login -u $DOCKER_USER --password-stdin"
-
-                        echo "Pushing Docker image to Docker Hub..."
-                        sh "sudo docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${DOCKER_USER}/${IMAGE_NAME}:${IMAGE_TAG}"
-                        sh "sudo docker push ${DOCKER_USER}/${IMAGE_NAME}:${IMAGE_TAG}"
-                    }
+                withCredentials([usernamePassword(
+                    credentialsId: "${DOCKER_CREDENTIALS_ID}", 
+                    usernameVariable: 'DOCKER_USER', 
+                    passwordVariable: 'DOCKER_PASS')]) {
+                    
+                    echo "Logging in to Docker Hub..."
+                    sh "echo $DOCKER_PASS | sudo docker login -u $DOCKER_USER --password-stdin"
+                    echo "Pushing Docker image ${DOCKER_IMAGE}..."
+                    sh "sudo docker push ${DOCKER_IMAGE}"
                 }
             }
         }
 
         stage('Cleanup Test Container') {
             steps {
-                script {
-                    echo "Cleaning up test container..."
-                    sh "sudo docker rm -f test-flask-devops-app || true"
-                }
+                echo "Cleaning up test container..."
+                sh "sudo docker rm -f test-flask-devops-app || true"
             }
         }
     }
@@ -68,11 +66,8 @@ pipeline {
         always {
             echo "Pipeline finished!"
         }
-        success {
-            echo "Pipeline succeeded!"
-        }
         failure {
-            echo "Pipeline failed!"
+            echo "Pipeline failed! Check logs."
         }
     }
 }
