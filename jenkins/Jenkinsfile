@@ -2,12 +2,11 @@ pipeline {
     agent any
 
     environment {
+        DOCKER_IMAGE = "awaismalak/flask-devops-app"
         DOCKER_CREDENTIALS_ID = "docker-hub-credentials"
-        KUBE_CONFIG = "/var/lib/jenkins/.kube/config"
     }
 
     stages {
-
         stage('Checkout SCM') {
             steps {
                 echo "Checking out code from Git..."
@@ -17,29 +16,19 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                script {
-                    // Dynamic image tag: version + build number
-                    env.IMAGE_TAG = "v1-${env.BUILD_NUMBER}"
-                    env.DOCKER_IMAGE = "awaismalak/flask-devops-app:${env.IMAGE_TAG}"
-                    echo "Building Docker image ${env.DOCKER_IMAGE}..."
-                    sh "docker build -t ${env.DOCKER_IMAGE} -f docker/Dockerfile ."
-                }
+                echo "Building Docker image ${DOCKER_IMAGE}..."
+                sh "docker build -t ${DOCKER_IMAGE}:${BUILD_NUMBER} -f docker/Dockerfile ."
             }
         }
 
         stage('Test Container') {
             steps {
                 script {
-                    // Pick a random test port
                     def TEST_PORT = sh(script: "shuf -i 5001-5999 -n 1", returnStdout: true).trim()
                     env.TEST_PORT = TEST_PORT
-                    echo "Running test container on port ${TEST_PORT}..."
-
-                    // Remove old test container if exists
+                    echo "Running test container on port ${TEST_PORT}"
                     sh "docker rm -f test-flask-devops-app || true"
-
-                    // Run the new test container
-                    sh "docker run -d --name test-flask-devops-app -p ${TEST_PORT}:5000 ${env.DOCKER_IMAGE}"
+                    sh "docker run -d --name test-flask-devops-app -p ${TEST_PORT}:5000 ${DOCKER_IMAGE}:${BUILD_NUMBER}"
                 }
             }
         }
@@ -53,8 +42,8 @@ pipeline {
                     
                     echo "Logging in to Docker Hub..."
                     sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
-                    echo "Pushing Docker image ${env.DOCKER_IMAGE}..."
-                    sh "docker push ${env.DOCKER_IMAGE}"
+                    echo "Pushing Docker image ${DOCKER_IMAGE}:${BUILD_NUMBER}..."
+                    sh "docker push ${DOCKER_IMAGE}:${BUILD_NUMBER}"
                 }
             }
         }
@@ -62,17 +51,14 @@ pipeline {
         stage('Deploy to Kubernetes') {
             steps {
                 echo "Deploying to Kubernetes..."
-                withEnv(["KUBECONFIG=${KUBE_CONFIG}"]) {
-                    // Update deployment.yaml with the dynamic image tag
-                    sh "sed -i 's|image: awaismalak/flask-devops-app:.*|image: ${env.DOCKER_IMAGE}|g' kubernetes/deployment.yaml"
+                sh "sed -i 's|image: ${DOCKER_IMAGE}:.*|image: ${DOCKER_IMAGE}:${BUILD_NUMBER}|' kubernetes/deployment.yaml"
+                sh "kubectl apply -f kubernetes/deployment.yaml"
+                sh "kubectl apply -f kubernetes/service.yaml"
+                sh "kubectl rollout status deployment/flask-app"
 
-                    // Apply deployment and service
-                    sh "kubectl apply -f kubernetes/deployment.yaml"
-                    sh "kubectl apply -f kubernetes/service.yaml"
-
-                    // Wait for rollout
-                    sh "kubectl rollout status deployment/flask-app"
-                }
+                echo "Applying Ingress and HPA..."
+                sh "kubectl apply -f kubernetes/ingress.yaml"
+                sh "kubectl apply -f kubernetes/hpa.yaml"
             }
         }
 
@@ -82,15 +68,10 @@ pipeline {
                 sh "docker rm -f test-flask-devops-app || true"
             }
         }
-
     }
 
     post {
-        always {
-            echo "Pipeline finished!"
-        }
-        failure {
-            echo "Pipeline failed! Check logs."
-        }
+        always { echo "Pipeline finished!" }
+        failure { echo "Pipeline failed! Check logs." }
     }
 }
