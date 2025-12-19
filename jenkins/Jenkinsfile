@@ -2,9 +2,9 @@ pipeline {
     agent any
 
     environment {
-        // Include your Docker Hub username in the image name
         DOCKER_IMAGE = "awaismalak/flask-devops-app:v1"
         DOCKER_CREDENTIALS_ID = "docker-hub-credentials"
+        KUBE_CONFIG = "/var/lib/jenkins/.kube/config"
     }
 
     stages {
@@ -26,15 +26,11 @@ pipeline {
         stage('Test Container') {
             steps {
                 script {
-                    // Generate a random test port between 5001-5999
                     def TEST_PORT = sh(script: "shuf -i 5001-5999 -n 1", returnStdout: true).trim()
                     env.TEST_PORT = TEST_PORT
                     echo "Running test container on port ${TEST_PORT}"
 
-                    // Remove old test container if exists
                     sh "docker rm -f test-flask-devops-app || true"
-
-                    // Run the new test container
                     sh "docker run -d --name test-flask-devops-app -p ${TEST_PORT}:5000 ${DOCKER_IMAGE}"
                 }
             }
@@ -55,12 +51,24 @@ pipeline {
             }
         }
 
+        stage('Deploy to Kubernetes') {
+            steps {
+                echo "Deploying to Kubernetes..."
+                withEnv(["KUBECONFIG=${KUBE_CONFIG}"]) {
+                    sh "kubectl apply -f kubernetes/deployment.yaml"
+                    sh "kubectl apply -f kubernetes/service.yaml"
+                    sh "kubectl rollout status deployment/flask-app"
+                }
+            }
+        }
+
         stage('Cleanup Test Container') {
             steps {
                 echo "Cleaning up test container..."
                 sh "docker rm -f test-flask-devops-app || true"
             }
         }
+
     }
 
     post {
