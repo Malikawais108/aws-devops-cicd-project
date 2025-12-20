@@ -1,0 +1,12 @@
+server:
+  global:
+    scrape_interval: 15s
+
+alertmanager:
+  enabled: true
+
+kubeStateMetrics:
+  enabled: true
+
+nodeExporter:
+  enabled: true
