@@ -1,0 +1,12 @@
+adminUser: admin
+adminPassword: #get from secrets appliyng all steps from docs
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+    - name: Prometheus
+      type: prometheus
+      access: proxy
+      url: http://prometheus-server.monitoring.svc.cluster.local
+      isDefault: true
