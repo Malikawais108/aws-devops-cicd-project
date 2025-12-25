@@ -9,3 +9,8 @@ This project demonstrates a production-style end-to-end CI/CD pipeline using:
 
 The pipeline automates build, test, deployment, rollback, and monitoring on AWS.
 
+
+
+
+
+--> MALAK AWAIS 
