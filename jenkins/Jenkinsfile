@@ -4,6 +4,7 @@ pipeline {
     environment {
         IMAGE_NAME = "awaismalak/flask-devops-app"
         DOCKER_CREDS = credentials('docker-hub-credentials')
+        GIT_CREDS = credentials('github-token')
         GIT_REPO = "https://github.com/Malikawais108/aws-devops-cicd-project.git"
         BRANCH = "main"
     }
@@ -18,49 +19,33 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                sh """
-                docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} -f docker/Dockerfile .
-                """
+                sh 'docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} -f docker/Dockerfile .'
             }
         }
 
         stage('DockerHub Login') {
             steps {
-                sh """
-                echo ${DOCKER_CREDS_PSW} | docker login -u ${DOCKER_CREDS_USR} --password-stdin
-                """
+                sh 'echo ${DOCKER_CREDS_PSW} | docker login -u ${DOCKER_CREDS_USR} --password-stdin'
             }
         }
 
-        stage('Push Image to DockerHub') {
+        stage('Push Image') {
             steps {
-                sh """
-                docker push ${IMAGE_NAME}:${BUILD_NUMBER}
-                """
+                sh 'docker push ${IMAGE_NAME}:${BUILD_NUMBER}'
             }
         }
 
-        stage('Update Kubernetes Deployment') {
+        stage('Update Kubernetes Manifest') {
             steps {
-                sh """
+                sh '''
                 sed -i "s|image: .*|image: ${IMAGE_NAME}:${BUILD_NUMBER}|g" kubernetes/deployment.yaml
-
                 git config user.email "ci@jenkins.com"
                 git config user.name "Jenkins CI"
                 git add kubernetes/deployment.yaml
                 git commit -m "Update image tag to ${BUILD_NUMBER}"
-                git push origin ${BRANCH}
-                """
+                git push https://${GIT_CREDS_USR}:${GIT_CREDS_PSW}@github.com/Malikawais108/aws-devops-cicd-project.git ${BRANCH}
+                '''
             }
-        }
-    }
-
-    post {
-        success {
-            echo "CI Pipeline Completed Successfully!"
-        }
-        failure {
-            echo "Pipeline Failed!"
         }
     }
 }
