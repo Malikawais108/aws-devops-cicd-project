@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: flask-app
-        image: awaismalak/flask-devops-app:v1   # your Docker Hub image
+        image: awaismalak/flask-devops-app:29
         ports:
         - containerPort: 5000
         env:
