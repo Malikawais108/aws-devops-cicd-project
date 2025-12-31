@@ -3,47 +3,47 @@ pipeline {
 
     environment {
         IMAGE_NAME = "awaismalak/flask-devops-app"
-        DOCKER_CREDS = credentials('dockerhub-creds')
+        DOCKER_CREDS = credentials('docker-hub-credentials')
     }
 
     stages {
 
         stage('Checkout') {
             steps {
-                git 'https://github.com/Malikawais108/aws-devops-cicd-project.git'
+                git branch: 'main', url: 'https://github.com/Malikawais108/aws-devops-cicd-project.git'
             }
         }
 
-        stage('Build Image') {
+        stage('Build Docker Image') {
             steps {
-                sh "docker build -t $IMAGE_NAME:${BUILD_NUMBER} ."
+                script {
+                    docker.build("${IMAGE_NAME}:${env.BUILD_NUMBER}")
+                }
             }
         }
 
-        stage('DockerHub Login') {
+        stage('DockerHub Login & Push') {
             steps {
-                sh '''
-                echo $DOCKER_CREDS_PSW | docker login -u $DOCKER_CREDS_USR --password-stdin
-                '''
+                script {
+                    docker.withRegistry('https://index.docker.io/v1/', 'docker-hub-credentials') {
+                        docker.image("${IMAGE_NAME}:${env.BUILD_NUMBER}").push()
+                    }
+                }
             }
         }
 
-        stage('Push Image') {
+        stage('Update Kubernetes Deployment') {
             steps {
-                sh "docker push $IMAGE_NAME:${BUILD_NUMBER}"
-            }
-        }
-
-        stage('Update Kubernetes Manifest') {
-            steps {
-                sh '''
-                sed -i "s|image: .*|image: $IMAGE_NAME:${BUILD_NUMBER}|g" kubernetes/deployment.yaml
-                git config user.email "ci@jenkins.com"
-                git config user.name "Jenkins CI"
-                git add kubernetes/deployment.yaml
-                git commit -m "Updated image to version ${BUILD_NUMBER}"
-                git push origin main
-                '''
+                script {
+                    sh """
+                        sed -i "s|image: .*|image: ${IMAGE_NAME}:${BUILD_NUMBER}|g" kubernetes/deployment.yaml
+                        git config user.email "ci@jenkins.com"
+                        git config user.name "Jenkins CI"
+                        git add kubernetes/deployment.yaml
+                        git commit -m "Updated image to version ${BUILD_NUMBER}" || echo "No changes to commit"
+                        git push origin main
+                    """
+                }
             }
         }
     }
