@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: flask-devops
+  namespace: argocd
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/Malikawais108/aws-devops-cicd-project.git
+    targetRevision: HEAD
+    path: kubernetes
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+
+  syncPolicy:
+    automated:
+      prune: true       # Deletes resources that are no longer defined in Git
+      selfHeal: true    # Automatically corrects drift from Git
+    syncOptions:
+      - CreateNamespace=true  # Creates the namespace if it doesn't exist
