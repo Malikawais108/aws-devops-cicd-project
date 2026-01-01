@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: flask-container
-        image: awaismalak/flask-devops-app:latest   # Jenkins / ArgoCD will update this tag
+        image: awaismalak/flask-devops-app:28   # Jenkins / ArgoCD will update this tag
         ports:
         - containerPort: 5000
 
