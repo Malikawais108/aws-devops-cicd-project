@@ -1,38 +1,33 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: flask-app
-  labels:
-    app: flask-app
+  name: flask-devops-deployment
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: flask-app
+      app: flask-devops
   template:
     metadata:
       labels:
-        app: flask-app
+        app: flask-devops
     spec:
       containers:
-      - name: flask-app
-        image: awaismalak/flask-devops-app:29
+      - name: flask-container
+        image: awaismalak/flask-devops-app:latest   # Jenkins / ArgoCD will update this tag
         ports:
         - containerPort: 5000
-        env:
-        - name: ENV
-          value: "production"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: flask-app-service
-spec:
-  type: NodePort
-  selector:
-    app: flask-app
-  ports:
-    - protocol: TCP
-      port: 5000
-      targetPort: 5000
-      nodePort: 32112   # you can choose a port in the 30000-32767 range
+
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 5000
+          initialDelaySeconds: 15
+          periodSeconds: 10
+
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 5000
+          initialDelaySeconds: 10
+          periodSeconds: 5
